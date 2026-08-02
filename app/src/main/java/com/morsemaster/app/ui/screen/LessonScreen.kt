@@ -1,19 +1,24 @@
 package com.morsemaster.app.ui.screen
 
+import androidx.compose.animation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.morsemaster.app.data.LessonRepository
 import com.morsemaster.app.data.QuestionType
+import com.morsemaster.app.data.UserProgress
+import com.morsemaster.app.util.HapticFeedback
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LessonScreen(lessonId: Int, onFinished: (correct: Int, total: Int) -> Unit) {
+    val context = LocalContext.current
     val lesson = LessonRepository.lessons.getOrNull(lessonId) ?: return
     var currentIndex by remember { mutableIntStateOf(0) }
     var correct by remember { mutableIntStateOf(0) }
@@ -23,11 +28,7 @@ fun LessonScreen(lessonId: Int, onFinished: (correct: Int, total: Int) -> Unit) 
     val exercise = lesson.exercises[currentIndex]
 
     Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text(lesson.title) },
-            )
-        }
+        topBar = { TopAppBar(title = { Text(lesson.title) }) }
     ) { padding ->
         Column(
             modifier = Modifier
@@ -66,7 +67,12 @@ fun LessonScreen(lessonId: Int, onFinished: (correct: Int, total: Int) -> Unit) 
                         if (!answered) {
                             selectedAnswer = option
                             answered = true
-                            if (option == exercise.correctAnswer) correct++
+                            if (option == exercise.correctAnswer) {
+                                correct++
+                                HapticFeedback.correct(context)
+                            } else {
+                                HapticFeedback.wrong(context)
+                            }
                         }
                     },
                     modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
@@ -78,6 +84,15 @@ fun LessonScreen(lessonId: Int, onFinished: (correct: Int, total: Int) -> Unit) 
 
             if (answered) {
                 Spacer(modifier = Modifier.height(24.dp))
+                // Feedback label
+                AnimatedVisibility(visible = true, enter = fadeIn()) {
+                    Text(
+                        text = if (selectedAnswer == exercise.correctAnswer) "✅ Richtig!" else "❌ Falsch – ${exercise.correctAnswer}",
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.padding(bottom = 12.dp)
+                    )
+                }
                 Button(
                     onClick = {
                         if (currentIndex + 1 < lesson.exercises.size) {
@@ -85,6 +100,8 @@ fun LessonScreen(lessonId: Int, onFinished: (correct: Int, total: Int) -> Unit) 
                             answered = false
                             selectedAnswer = null
                         } else {
+                            val xp = UserProgress.recordLessonComplete(context, lessonId, correct, lesson.exercises.size)
+                            if (correct == lesson.exercises.size) HapticFeedback.celebrate(context)
                             onFinished(correct, lesson.exercises.size)
                         }
                     },
