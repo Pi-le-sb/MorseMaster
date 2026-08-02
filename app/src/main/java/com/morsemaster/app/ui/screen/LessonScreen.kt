@@ -10,50 +10,52 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.morsemaster.app.data.LessonRepository
-import com.morsemaster.app.data.QuestionType
-import com.morsemaster.app.data.UserProgress
+import com.morsemaster.app.data.*
 import com.morsemaster.app.util.HapticFeedback
+import com.morsemaster.app.util.MorseAudioPlayer
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LessonScreen(lessonId: Int, onFinished: (correct: Int, total: Int) -> Unit) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val lesson = LessonRepository.lessons.getOrNull(lessonId) ?: return
     var currentIndex by remember { mutableIntStateOf(0) }
     var correct by remember { mutableIntStateOf(0) }
     var selectedAnswer by remember { mutableStateOf<String?>(null) }
     var answered by remember { mutableStateOf(false) }
-
     val exercise = lesson.exercises[currentIndex]
 
-    Scaffold(
-        topBar = { TopAppBar(title = { Text(lesson.title) }) }
-    ) { padding ->
+    Scaffold(topBar = { TopAppBar(title = { Text(lesson.title) }) }) { padding ->
         Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .padding(24.dp),
+            modifier = Modifier.fillMaxSize().padding(padding).padding(24.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             LinearProgressIndicator(
                 progress = { (currentIndex + 1).toFloat() / lesson.exercises.size },
                 modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp)
             )
-
             val questionLabel = when (exercise.questionType) {
                 QuestionType.LETTER_TO_MORSE -> "Welcher Morse-Code steht für:"
                 QuestionType.MORSE_TO_LETTER -> "Welcher Buchstabe steht für:"
             }
             Text(questionLabel, style = MaterialTheme.typography.labelLarge)
-            Spacer(modifier = Modifier.height(12.dp))
-            Text(
-                text = exercise.question,
-                fontSize = 48.sp,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(bottom = 32.dp)
-            )
+            Spacer(Modifier.height(8.dp))
+
+            // Play audio button for morse->letter exercises
+            if (exercise.questionType == QuestionType.MORSE_TO_LETTER && UserSettings.isAudioEnabled(context)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(exercise.question, fontSize = 42.sp, fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.width(12.dp))
+                    IconButton(onClick = { scope.launch { MorseAudioPlayer.play(exercise.question) } }) {
+                        Text("🔊", fontSize = 24.sp)
+                    }
+                }
+            } else {
+                Text(exercise.question, fontSize = 48.sp, fontWeight = FontWeight.Bold)
+            }
+            Spacer(Modifier.height(28.dp))
 
             exercise.options.forEach { option ->
                 val containerColor = when {
@@ -67,48 +69,48 @@ fun LessonScreen(lessonId: Int, onFinished: (correct: Int, total: Int) -> Unit) 
                         if (!answered) {
                             selectedAnswer = option
                             answered = true
-                            if (option == exercise.correctAnswer) {
+                            val isCorrect = option == exercise.correctAnswer
+                            if (isCorrect) {
                                 correct++
-                                HapticFeedback.correct(context)
+                                if (UserSettings.isHapticsEnabled(context)) HapticFeedback.correct(context)
                             } else {
-                                HapticFeedback.wrong(context)
+                                if (UserSettings.isHapticsEnabled(context)) HapticFeedback.wrong(context)
                             }
+                            SpacedRepetition.recordAnswer(context, exercise.question, isCorrect)
                         }
                     },
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 5.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = containerColor)
-                ) {
-                    Text(option, fontSize = 18.sp)
-                }
+                ) { Text(option, fontSize = 18.sp) }
             }
 
             if (answered) {
-                Spacer(modifier = Modifier.height(24.dp))
-                // Feedback label
-                AnimatedVisibility(visible = true, enter = fadeIn()) {
+                Spacer(Modifier.height(20.dp))
+                AnimatedVisibility(visible = true, enter = fadeIn() + slideInVertically()) {
                     Text(
                         text = if (selectedAnswer == exercise.correctAnswer) "✅ Richtig!" else "❌ Falsch – ${exercise.correctAnswer}",
-                        style = MaterialTheme.typography.bodyLarge,
                         fontWeight = FontWeight.SemiBold,
+                        style = MaterialTheme.typography.bodyLarge,
                         modifier = Modifier.padding(bottom = 12.dp)
                     )
                 }
                 Button(
                     onClick = {
                         if (currentIndex + 1 < lesson.exercises.size) {
-                            currentIndex++
-                            answered = false
-                            selectedAnswer = null
+                            currentIndex++; answered = false; selectedAnswer = null
                         } else {
-                            val xp = UserProgress.recordLessonComplete(context, lessonId, correct, lesson.exercises.size)
-                            if (correct == lesson.exercises.size) HapticFeedback.celebrate(context)
+                            val isPerfect = correct == lesson.exercises.size
+                            UserProgress.recordLessonComplete(context, lessonId, correct, lesson.exercises.size)
+                            val newXp = UserProgress.getXp(context)
+                            val streak = UserProgress.getStreak(context)
+                            val completedCount = UserProgress.getCompletedLessons(context).size
+                            AchievementRepository.checkAndUnlock(context, newXp, streak, completedCount, isPerfect, false)
+                            if (isPerfect && UserSettings.isHapticsEnabled(context)) HapticFeedback.celebrate(context)
                             onFinished(correct, lesson.exercises.size)
                         }
                     },
                     modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text(if (currentIndex + 1 < lesson.exercises.size) "Weiter" else "Ergebnisse ansehen")
-                }
+                ) { Text(if (currentIndex + 1 < lesson.exercises.size) "Weiter" else "Ergebnisse ansehen") }
             }
         }
     }
