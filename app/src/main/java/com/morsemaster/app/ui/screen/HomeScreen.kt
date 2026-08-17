@@ -26,11 +26,11 @@ fun HomeScreen(
     onOpenReview: () -> Unit
 ) {
     val context = LocalContext.current
-    var xp by remember { mutableIntStateOf(UserProgress.getXp(context)) }
-    var streak by remember { mutableIntStateOf(UserProgress.getStreak(context)) }
+    val xp = remember { mutableIntStateOf(UserProgress.getXp(context)) }
+    val streak = remember { mutableIntStateOf(UserProgress.getStreak(context)) }
     val completed by remember { mutableStateOf(UserProgress.getCompletedLessons(context)) }
-    val level = UserProgress.xpToLevel(xp)
-    val xpInLevel = UserProgress.xpInCurrentLevel(xp)
+    val level = UserProgress.xpToLevel(xp.intValue)
+    val xpInLevel = UserProgress.xpInCurrentLevel(xp.intValue)
 
     Scaffold(
         topBar = {
@@ -40,9 +40,9 @@ fun HomeScreen(
                     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(end = 8.dp)) {
                         Icon(Icons.Default.Star, "XP", tint = MaterialTheme.colorScheme.primary)
                         Spacer(Modifier.width(2.dp))
-                        Text("$xp XP", fontWeight = FontWeight.Bold)
+                        Text("${xp.intValue} XP", fontWeight = FontWeight.Bold)
                         Spacer(Modifier.width(10.dp))
-                        Text("🔥 $streak", fontWeight = FontWeight.Bold)
+                        Text("🔥 ${streak.intValue}", fontWeight = FontWeight.Bold)
                         Spacer(Modifier.width(4.dp))
                         IconButton(onClick = onOpenSettings) {
                             Icon(Icons.Default.Settings, "Einstellungen")
@@ -68,7 +68,7 @@ fun HomeScreen(
                 NavigationBarItem(
                     selected = false,
                     onClick = onOpenAchievements,
-                    icon = { Icon(Icons.Default.EmojiEvents, null) },
+                    icon = { Icon(Icons.Default.Star, null) },
                     label = { Text("Erfolge") }
                 )
             }
@@ -80,7 +80,6 @@ fun HomeScreen(
             contentPadding = PaddingValues(vertical = 16.dp)
         ) {
             item {
-                // Level card
                 Card(modifier = Modifier.fillMaxWidth()) {
                     Column(modifier = Modifier.padding(16.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -94,17 +93,14 @@ fun HomeScreen(
                     }
                 }
             }
-            item {
-                Text("Lektionen", fontSize = 18.sp, fontWeight = FontWeight.Bold)
-            }
+            item { Text("Lektionen", fontSize = 18.sp, fontWeight = FontWeight.Bold) }
             itemsIndexed(LessonRepository.lessons) { _, lesson ->
                 val isDone = completed.contains(lesson.id)
                 Card(
                     onClick = { onStartLesson(lesson.id) },
                     modifier = Modifier.fillMaxWidth(),
                     colors = CardDefaults.cardColors(
-                        containerColor = if (isDone) MaterialTheme.colorScheme.primaryContainer
-                                         else MaterialTheme.colorScheme.surfaceVariant
+                        containerColor = if (isDone) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant
                     )
                 ) {
                     Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
